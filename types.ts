@@ -27,7 +27,7 @@ export interface AdminUser {
 export interface HistoryLog {
   id: string;
   username: string;
-  action: 'TAMBAH' | 'EDIT' | 'HAPUS';
+  action: 'TAMBAH' | 'EDIT' | 'HAPUS' | 'TAMBAH_KATEGORI' | 'HAPUS_KATEGORI';
   productName: string;
   productCode: string;
   timestamp: string;

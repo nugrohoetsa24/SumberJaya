@@ -2,7 +2,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import { 
   Plus, Upload, Download, Trash2, Edit2, X, Image as ImageIcon, 
   Save, Settings, UserPlus, Shield, AlertTriangle, CheckCircle2, 
-  LayoutGrid, List as ListIcon, MoreVertical, Info, Clock, User
+  LayoutGrid, List as ListIcon, MoreVertical, Info, Clock, User,
+  RotateCcw
 } from 'lucide-react';
 import { Product, Category, AdminUser, ViewMode, HistoryLog } from '../types';
 import { parseExcel, exportToExcel } from '../services/excelService';
@@ -112,7 +113,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const confirmDeleteCategory = () => {
     if (categoryToDelete) {
-      onUpdateCategories(categories.filter(c => c.id !== categoryToDelete.id));
+      // Cek apakah ada produk yang masih menggunakan kategori ini
+      const productsInCategory = products.filter(p => p.category === categoryToDelete.name);
+      if (productsInCategory.length > 0) {
+        alert(`Gagal menghapus: Kategori "${categoryToDelete.name}" masih digunakan oleh ${productsInCategory.length} produk. Silahkan ubah kategori produk tersebut terlebih dahulu.`);
+        setCategoryToDelete(null);
+        return;
+      }
+
+      const updatedCategories = categories.filter(c => c.id !== categoryToDelete.id);
+      onUpdateCategories(updatedCategories);
+
+      storageService.addHistory({
+        username: adminUsername,
+        action: 'HAPUS_KATEGORI',
+        productName: categoryToDelete.name,
+        productCode: 'KATEGORI'
+      });
+      refreshLogs();
+
       setCategoryToDelete(null);
     }
   };
@@ -261,8 +280,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   };
 
   const handleAddCategory = () => {
-    if (newCategory.trim() && !categories.some(c => c.name.toLowerCase() === newCategory.toLowerCase())) {
-      onUpdateCategories([...categories, { id: `cat_${Date.now()}`, name: newCategory.trim() }]);
+    const trimmed = newCategory.trim();
+    if (trimmed && !categories.some(c => c.name.toLowerCase() === trimmed.toLowerCase())) {
+      onUpdateCategories([...categories, { id: `cat_${Date.now()}`, name: trimmed }]);
+      
+      storageService.addHistory({
+        username: adminUsername,
+        action: 'TAMBAH_KATEGORI',
+        productName: trimmed,
+        productCode: 'KATEGORI'
+      });
+      refreshLogs();
+      
       setNewCategory('');
     }
   };
@@ -290,6 +319,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       setAdmins(updatedAdmins);
       storageService.saveAdmins(updatedAdmins);
     }
+  };
+
+  const getActionStyles = (action: HistoryLog['action']) => {
+    switch (action) {
+      case 'TAMBAH': return 'bg-green-100 text-green-700';
+      case 'EDIT': return 'bg-blue-100 text-blue-700';
+      case 'HAPUS': return 'bg-red-100 text-red-700';
+      case 'TAMBAH_KATEGORI': return 'bg-emerald-100 text-emerald-800';
+      case 'HAPUS_KATEGORI': return 'bg-orange-100 text-orange-800';
+      default: return 'bg-gray-100 text-gray-700';
+    }
+  };
+
+  const formatActionName = (action: HistoryLog['action']) => {
+    return action.replace('_', ' ');
   };
 
   return (
@@ -365,6 +409,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <th className="px-6 py-4">Produk</th>
                       <th className="px-6 py-4">Kode</th>
                       <th className="px-6 py-4">Kategori</th>
+                      <th className="px-6 py-4">Terakhir Diperbarui</th>
                       <th className="px-6 py-4 text-right">Harga</th>
                       <th className="px-6 py-4 text-center">Aksi</th>
                     </tr>
@@ -372,7 +417,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <tbody className="divide-y divide-gray-200">
                     {products.length === 0 ? (
                       <tr>
-                        <td colSpan={5} className="px-6 py-12 text-center text-gray-400">
+                        <td colSpan={6} className="px-6 py-12 text-center text-gray-400">
                           Belum ada produk. Silahkan tambah atau import.
                         </td>
                       </tr>
@@ -399,6 +444,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
                             {product.category}
                           </span>
+                        </td>
+                        <td className="px-6 py-4 text-gray-500 text-xs whitespace-nowrap">
+                          {product.updatedAt ? new Date(product.updatedAt).toLocaleString('id-ID', { 
+                            dateStyle: 'medium', 
+                            timeStyle: 'short' 
+                          }) : '-'}
                         </td>
                         <td className="px-6 py-4 text-right font-medium text-gray-900">
                           Rp {product.price.toLocaleString('id-ID')}
@@ -538,6 +589,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <Clock className="w-5 h-5 text-indigo-600" />
               <h3 className="font-bold text-gray-900">Riwayat Aktivitas Admin</h3>
             </div>
+            <button 
+              onClick={refreshLogs}
+              className="p-2 text-gray-400 hover:text-indigo-600 transition-colors"
+              title="Segarkan Riwayat"
+            >
+              <RotateCcw className="w-4 h-4" />
+            </button>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
@@ -546,8 +604,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <th className="px-6 py-4">Waktu</th>
                   <th className="px-6 py-4">Admin</th>
                   <th className="px-6 py-4">Aksi</th>
-                  <th className="px-6 py-4">Produk</th>
-                  <th className="px-6 py-4">Kode</th>
+                  <th className="px-6 py-4">Item</th>
+                  <th className="px-6 py-4">Info</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -565,16 +623,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </td>
                     <td className="px-6 py-4 font-medium text-gray-900">{log.username}</td>
                     <td className="px-6 py-4">
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold ${
-                        log.action === 'TAMBAH' ? 'bg-green-100 text-green-700' :
-                        log.action === 'EDIT' ? 'bg-blue-100 text-blue-700' :
-                        'bg-red-100 text-red-700'
-                      }`}>
-                        {log.action}
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-black tracking-tight ${getActionStyles(log.action)}`}>
+                        {formatActionName(log.action)}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-gray-700">{log.productName}</td>
-                    <td className="px-6 py-4 font-mono text-xs text-gray-400">{log.productCode}</td>
+                    <td className="px-6 py-4 text-gray-700 font-medium">{log.productName}</td>
+                    <td className="px-6 py-4 font-mono text-[10px] text-gray-400">{log.productCode}</td>
                   </tr>
                 ))}
               </tbody>
@@ -647,7 +701,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
       )}
 
-      {/* MODALS RENDERED BELOW */}
+      {/* MODALS */}
       {showImportSuccess && importSummary && (
         <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm transition-all">
           <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full overflow-hidden">
@@ -673,6 +727,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <div className="flex flex-col gap-2">
                 <button onClick={confirmDeleteProduct} className="w-full py-3 bg-red-600 text-white rounded-xl font-bold">Ya, Hapus Produk</button>
                 <button onClick={() => setProductToDelete(null)} className="w-full py-3 bg-gray-100 text-gray-700 rounded-xl">Batal</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {categoryToDelete && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full overflow-hidden">
+            <div className="p-6 text-center">
+              <AlertTriangle className="mx-auto w-16 h-16 text-orange-600 mb-4" />
+              <h3 className="text-xl font-bold text-gray-900 mb-2">Hapus Kategori?</h3>
+              <p className="text-gray-500 mb-6">Yakin ingin menghapus kategori <span className="font-semibold text-gray-900">"{categoryToDelete.name}"</span>?</p>
+              <div className="flex flex-col gap-2">
+                <button onClick={confirmDeleteCategory} className="w-full py-3 bg-red-600 text-white rounded-xl font-bold">Ya, Hapus Kategori</button>
+                <button onClick={() => setCategoryToDelete(null)} className="w-full py-3 bg-gray-100 text-gray-700 rounded-xl">Batal</button>
               </div>
             </div>
           </div>

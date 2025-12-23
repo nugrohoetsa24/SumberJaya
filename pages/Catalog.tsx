@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo } from 'react';
 import { Search, Filter, X, Edit2, Trash2, FileText, Share2, MessageCircle, Download, RotateCcw } from 'lucide-react';
 import { Product, Category } from '../types';
@@ -54,11 +53,17 @@ export const Catalog: React.FC<CatalogProps> = ({
     setSearchQuery('');
   };
 
-  const handleShareToWhatsApp = async (product: Product) => {
+  const handleShareToWhatsApp = async (product: Product, e?: React.MouseEvent) => {
+    // Prevent opening modal when sharing from card
+    if (e) {
+      e.stopPropagation();
+    }
+
     setIsGenerating(true);
     try {
       const message = `Halo, berikut detil produk kami.\n\nNama: ${product.name}\nKode: ${product.code}\nHarga: Rp ${product.price.toLocaleString('id-ID')}\n\nDeskripsi:\n${product.description}\n\nSumber Jaya`;
       
+      // Native sharing if supported (e.g., mobile browsers)
       if (navigator.share && navigator.canShare) {
         const blob = await (pdfService as any).generateSingleProductPDFBlob(product);
         const file = new File([blob], `Produk_${product.code}.pdf`, { type: 'application/pdf' });
@@ -73,11 +78,13 @@ export const Catalog: React.FC<CatalogProps> = ({
         }
       }
 
+      // Fallback: Just trigger PDF download and open WhatsApp link
       await pdfService.generateSingleProductPDF(product);
       const waUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
       window.open(waUrl, '_blank');
     } catch (e) {
       console.error('Sharing failed', e);
+      // Absolute fallback: Only WhatsApp link
       const message = `Halo, berikut detil produk kami.\n\nNama: ${product.name}\nKode: ${product.code}\nHarga: Rp ${product.price.toLocaleString('id-ID')}\n\nDeskripsi:\n${product.description}\n\nSumber Jaya`;
       const waUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
       window.open(waUrl, '_blank');
@@ -186,6 +193,7 @@ export const Catalog: React.FC<CatalogProps> = ({
               <ProductCard 
                 product={product} 
                 onClick={setSelectedProduct} 
+                onShare={handleShareToWhatsApp}
               />
             </div>
           ))}
@@ -274,7 +282,7 @@ export const Catalog: React.FC<CatalogProps> = ({
                         className="flex items-center justify-center w-full bg-[#25D366] text-white py-4 px-6 rounded-2xl font-bold hover:bg-[#128C7E] transition-all shadow-lg shadow-green-100 active:scale-95"
                       >
                         <MessageCircle className="w-5 h-5 mr-3" />
-                        Tanya via WhatsApp
+                        Bagikan via WhatsApp
                       </button>
                       <button 
                         onClick={() => pdfService.generateSingleProductPDF(selectedProduct)}
