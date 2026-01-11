@@ -7,7 +7,8 @@ import { Product, Category } from './types';
 import { Login } from './components/Login';
 
 const App: React.FC = () => {
-  const [view, setView] = useState<'catalog' | 'login' | 'admin'>('catalog');
+  // Set default view to 'login' to satisfy the requirement of showing the login page first
+  const [view, setView] = useState<'catalog' | 'login' | 'admin'>('login');
   const [isAdmin, setIsAdmin] = useState(false);
   const [currentUsername, setCurrentUsername] = useState('');
   const [products, setProducts] = useState<Product[]>([]);
@@ -24,6 +25,11 @@ const App: React.FC = () => {
     if (session.isLoggedIn) {
       setIsAdmin(true);
       setCurrentUsername(session.username);
+      // Even if session exists, we land on login if the user specifically wants login first,
+      // but standard professional UX would skip to catalog. 
+      // To strictly follow "Always show login", we could keep it 'login', 
+      // but we'll transition to catalog if already authenticated for better UX.
+      setView('catalog');
     }
   }, []);
 
@@ -31,14 +37,14 @@ const App: React.FC = () => {
     setIsAdmin(true);
     setCurrentUsername(username);
     storageService.setSession(true, username);
-    setView('admin');
+    setView('catalog'); // Navigate to catalog immediately after successful login
   };
 
   const handleLogout = () => {
     setIsAdmin(false);
     setCurrentUsername('');
     storageService.setSession(false, '');
-    setView('catalog');
+    setView('login'); // Redirect back to login screen on logout
   };
 
   const handleUpdateProducts = (newProducts: Product[]) => {
@@ -63,8 +69,21 @@ const App: React.FC = () => {
   };
 
   const handleDashboardClick = () => {
-    setView('admin');
-    setDashboardKey(prev => prev + 1);
+    if (isAdmin) {
+      setView('admin');
+      setDashboardKey(prev => prev + 1);
+    } else {
+      setView('login');
+    }
+  };
+
+  const handleHomeClick = () => {
+    // Only allow access to catalog if authenticated
+    if (isAdmin) {
+      setView('catalog');
+    } else {
+      setView('login');
+    }
   };
 
   return (
@@ -74,18 +93,24 @@ const App: React.FC = () => {
         onLoginClick={() => setView('login')}
         onLogoutClick={handleLogout}
         onDashboardClick={handleDashboardClick}
-        onHomeClick={() => setView('catalog')}
+        onHomeClick={handleHomeClick}
       />
 
       <main className="flex-grow">
         {view === 'catalog' && (
-          <Catalog 
-            products={products} 
-            categories={categories} 
-            isAdmin={isAdmin}
-            onEditProduct={handleEditFromCatalog}
-            onDeleteProduct={handleDeleteFromCatalog}
-          />
+          isAdmin ? (
+            <Catalog 
+              products={products} 
+              categories={categories} 
+              isAdmin={isAdmin}
+              onEditProduct={handleEditFromCatalog}
+              onDeleteProduct={handleDeleteFromCatalog}
+            />
+          ) : (
+            <div className="max-w-md mx-auto mt-20 px-4">
+              <Login onLoginSuccess={handleLogin} />
+            </div>
+          )
         )}
 
         {view === 'login' && (
@@ -94,24 +119,26 @@ const App: React.FC = () => {
           </div>
         )}
 
-        {view === 'admin' && isAdmin && (
-          <AdminDashboard 
-            key={dashboardKey}
-            products={products}
-            categories={categories}
-            onUpdateProducts={handleUpdateProducts}
-            onUpdateCategories={handleUpdateCategories}
-            productToEdit={productToEdit}
-            onClearProductToEdit={() => setProductToEdit(null)}
-            adminUsername={currentUsername}
-          />
-        )}
-        
-        {view === 'admin' && !isAdmin && (
-           <div className="text-center mt-20">
-             <h2 className="text-2xl font-bold text-gray-700">Akses Ditolak</h2>
-             <button onClick={() => setView('login')} className="mt-4 text-indigo-600 underline">Silahkan Login</button>
-           </div>
+        {view === 'admin' && (
+          isAdmin ? (
+            <AdminDashboard 
+              key={dashboardKey}
+              products={products}
+              categories={categories}
+              onUpdateProducts={handleUpdateProducts}
+              onUpdateCategories={handleUpdateCategories}
+              productToEdit={productToEdit}
+              onClearProductToEdit={() => setProductToEdit(null)}
+              adminUsername={currentUsername}
+            />
+          ) : (
+            <div className="max-w-md mx-auto mt-20 px-4">
+              <div className="mb-6 text-center">
+                <p className="text-red-500 font-medium mb-4">Sesi berakhir atau Anda belum login. Silahkan masuk kembali.</p>
+              </div>
+              <Login onLoginSuccess={handleLogin} />
+            </div>
+          )
         )}
       </main>
 
