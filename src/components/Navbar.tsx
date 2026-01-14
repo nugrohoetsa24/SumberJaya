@@ -30,7 +30,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           >
            <img 
              src={logo} 
-             style={{ height: '32px' }} 
+             style={{ height: '100px' }} 
              />
 
       
