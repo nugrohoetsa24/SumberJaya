@@ -28,15 +28,12 @@ export const Navbar: React.FC<NavbarProps> = ({
             className="flex items-center cursor-pointer"
             onClick={onHomeClick}
           >
-            <img
-              src="{logo}"
-              alt="Sumber Jaya Auto Accessories"
-              className="
-                h-8 sm:h-9 md:h-10 
-                w-auto 
-                object-contain
-              "
-            />
+           <img 
+             src={logo} 
+             style={{ height: '32px' }} 
+             />
+
+      
           </div>
 
           {/* ACTION BUTTONS */}
