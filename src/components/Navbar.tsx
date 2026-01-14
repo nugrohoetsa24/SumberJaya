@@ -1,4 +1,6 @@
 import React from 'react';
+import logo from '../assets/logo.png';
+import React from 'react';
 import { Lock, LogOut } from 'lucide-react';
 
 interface NavbarProps {
@@ -27,7 +29,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             onClick={onHomeClick}
           >
             <img
-              src="logo.png"
+              src="{logo}"
               alt="Sumber Jaya Auto Accessories"
               className="
                 h-8 sm:h-9 md:h-10 
