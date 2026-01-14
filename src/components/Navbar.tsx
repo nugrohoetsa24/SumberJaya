@@ -27,7 +27,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             onClick={onHomeClick}
           >
             <img
-              src="/logo.png"
+              src="logo.png"
               alt="Sumber Jaya Auto Accessories"
               className="
                 h-8 sm:h-9 md:h-10 
