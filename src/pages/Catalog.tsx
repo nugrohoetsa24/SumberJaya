@@ -1,3 +1,4 @@
+import { supabase } from '@/lib/supabase';
 import React, { useState, useMemo } from 'react';
 import { Search, Filter, X, Edit2, Trash2, FileText, Share2, MessageCircle, Download, RotateCcw } from 'lucide-react';
 import { Product, Category } from '../types';
