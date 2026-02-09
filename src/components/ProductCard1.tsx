@@ -14,18 +14,34 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   onShare,
 }) => {
   const [imageError, setImageError] = useState(false);
-  const [imageLoaded, setImageLoaded] = useState(false);
 
- // Di ProductCard.tsx, tambah debugging:
-React.useEffect(() => {
-  console.log(`🖼️ Product ${product.code}:`, {
-    imageUrl: product.imageUrl,
-    name: product.name,
-    hasImage: !!product.imageUrl,
-    // Coba akses langsung URL
-    directUrl: `https://ngtsssdajduqvksqthvb.supabase.co/storage/v1/object/public/product-images/product_1770461253713_lml1dr9b.png`
-  });
-}, [product]);
+  // Debug lebih detail
+  React.useEffect(() => {
+    console.log(`🖼️ DEBUG Product ${product.code}:`, {
+      id: product.id,
+      name: product.name,
+      imageUrl: product.imageUrl,
+      // Cek semua properti yang ada
+      allProps: Object.keys(product)
+    });
+  }, [product]);
+
+  // Coba cari image_url dengan berbagai nama
+  const getImageUrl = () => {
+    // Coba berbagai kemungkinan nama properti
+    const possibleKeys = ['imageUrl', 'image_url', 'image', 'url', 'photo'];
+    
+    for (const key of possibleKeys) {
+      if ((product as any)[key]) {
+        console.log(`✅ Found image at key: ${key} =`, (product as any)[key]);
+        return (product as any)[key];
+      }
+    }
+    
+    return null;
+  };
+
+  const imageUrl = getImageUrl();
 
   return (
     <div
@@ -34,34 +50,24 @@ React.useEffect(() => {
     >
       {/* FIXED HEIGHT IMAGE */}
       <div className="h-48 overflow-hidden bg-gray-100">
-        {product.imageUrl && !imageError ? (
-          <>
-            {/* Loading skeleton */}
-            {!imageLoaded && (
-              <div className="absolute inset-0 animate-pulse bg-gray-200" />
-            )}
-            
-            <img
-              src={product.imageUrl}
-              alt={product.name}
-              className={`w-full h-full object-cover hover:scale-105 transition-transform duration-300 ${
-                imageLoaded ? 'opacity-100' : 'opacity-0'
-              }`}
-              loading="lazy"
-              onLoad={() => setImageLoaded(true)}
-              onError={() => {
-                console.error(`❌ Failed to load image for ${product.name}:`, product.imageUrl);
-                setImageError(true);
-                setImageLoaded(true);
-              }}
-            />
-          </>
+        {imageUrl && !imageError ? (
+          <img
+            src={imageUrl}
+            alt={product.name}
+            className="w-full h-full object-cover hover:scale-105 transition-transform duration-300"
+            loading="lazy"
+            onError={() => {
+              console.error(`❌ Failed to load image: ${imageUrl}`);
+              setImageError(true);
+            }}
+          />
         ) : (
           <div className="w-full h-full flex flex-col items-center justify-center p-4">
-            <div className="text-3xl text-gray-300 mb-2">📷</div>
-            <p className="text-sm text-gray-400 text-center">
-              {imageError ? 'Gambar tidak tersedia' : 'Tidak ada gambar'}
+            <div className="text-4xl text-gray-300 mb-2">📦</div>
+            <p className="text-sm text-gray-500 text-center">
+              {imageError ? 'Gagal memuat gambar' : 'Tidak ada gambar'}
             </p>
+            <p className="text-xs text-gray-400 mt-1">{product.code}</p>
           </div>
         )}
       </div>

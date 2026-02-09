@@ -4,13 +4,43 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>AutoGear - Aksesoris Mobil & Truk</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <title>Sumber Jaya - Aksesoris Mobil & Truk</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+     <!-- TAILWIND CDN (UNTUK TESTING SAJA) -->
+    <script src="https://cdn.tailwindcss.com"></script>
     <style>
       body { font-family: 'Inter', sans-serif; }
       .no-scrollbar::-webkit-scrollbar { display: none; }
       .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+      body {
+        font-family: system-ui, -apple-system, 'Inter', sans-serif;
+        background-color: #f9fafb;
+      }
+
+      .product-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+      gap: 1.5rem;
+    }
+    
+    .product-card {
+      background: white;
+      border-radius: 1rem;
+      overflow: hidden;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+      transition: box-shadow 0.3s ease;
+    }
+    
+    .product-card:hover {
+      box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+    }
+    
+    .product-image {
+      width: 100%;
+      height: 200px;
+      object-fit: cover;
+    }
     </style>
   <script type="importmap">
 {

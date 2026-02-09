@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase';
+import { supabase } from '../lib/supabase';
 import React, { useState, useMemo } from 'react';
 import { Search, Filter, X, Edit2, Trash2, FileText, Share2, MessageCircle, Download, RotateCcw } from 'lucide-react';
 import { Product, Category } from '../types';
@@ -244,7 +244,7 @@ export const Catalog: React.FC<CatalogProps> = ({
                 {/* Image Section */}
                 <div className="w-full md:w-1/2 h-80 md:h-auto bg-gray-50 flex items-center justify-center relative">
                   <img 
-                    src={selectedProduct.imageUrl || 'https://via.placeholder.com/600x600?text=No+Image'} 
+                    src={selectedProduct.imageUrl || '/no-image.png'}
                     alt={selectedProduct.name} 
                     className="w-full h-full object-cover"
                   />

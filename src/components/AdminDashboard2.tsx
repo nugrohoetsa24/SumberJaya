@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import type { Product, Category, AdminUser, HistoryLog } from '../types';
 import { parseExcel, exportToExcel } from '../services/excelService';
-import { uploadProductImage, deleteProductImage } from '../services/storageService';
+import { uploadProductImage } from '../services/storageService';
 import { pdfService } from '../services/pdfService';
 import { AdminManagement } from './AdminManagement';
 
@@ -220,48 +220,36 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const confirmDeleteProduct = async () => {
     if (!productToDelete) return;
-
-    try {
-      // 1. Hapus gambar dari storage jika ada
-      if (productToDelete.imageUrl) {
-        await deleteProductImage(productToDelete.imageUrl);
-      }
-      
-      // 2. Hapus produk dari database
-      const { error } = await supabase
-        .from('produk')
-        .delete()
-        .eq('id', productToDelete.id);
-
-      if (error) {
-        alert('Gagal menghapus produk');
-        console.error(error);
-        return;
-      }
-
-      // 3. Update UI (state)
-      onUpdateProducts(
-        products.filter(p => p.id !== productToDelete.id)
-      );
-
-      // 4. Add to history
-      await supabase
-        .from('history_logs')
-        .insert({
-          username: adminUsername,
-          action: 'HAPUS',
-          product_name: productToDelete.name,
-          product_code: productToDelete.code,
-          timestamp: new Date().toISOString()
-        });
-
-      fetchHistoryLogs();
-      setProductToDelete(null);
-      
-    } catch (error) {
-      console.error('Error deleting product:', error);
-      alert('Terjadi kesalahan saat menghapus produk');
+  
+    const { error } = await supabase
+      .from('produk')
+      .delete()
+      .eq('id', productToDelete.id);
+  
+    if (error) {
+      alert('Gagal menghapus produk');
+      console.error(error);
+      return;
     }
+  
+    // update UI (state)
+    onUpdateProducts(
+      products.filter(p => p.id !== productToDelete.id)
+    );
+
+    // Add to history
+    await supabase
+      .from('history_logs')
+      .insert({
+        username: adminUsername,
+        action: 'HAPUS',
+        product_name: productToDelete.name,
+        product_code: productToDelete.code,
+        timestamp: new Date().toISOString()
+      });
+  
+    fetchHistoryLogs();
+    setProductToDelete(null);
   };
 
   const initiateDeleteCategory = (category: Category) => {
@@ -353,14 +341,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
       // Validasi tipe file
       if (!file.type.startsWith('image/')) {
-        alert('File harus berupa gambar (JPG, PNG, dll)');
-        throw new Error('Invalid file type');
-      }
-      
-      // Hapus gambar lama jika ada (saat edit produk)
-      if (editingProduct && editingProduct.imageUrl && editingProduct.imageUrl !== formData.imageUrl) {
-        console.log('🗑️ Deleting old image before upload...');
-        await deleteProductImage(editingProduct.imageUrl);
+      alert('File harus berupa gambar (JPG, PNG, dll)');
+      throw new Error('Invalid file type');
       }
       
       // Tampilkan loading
@@ -389,27 +371,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
   
-  const handleRemoveImage = async (e: React.MouseEvent) => {
+  const handleRemoveImage = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    
-    try {
-      // Hapus dari storage jika ada gambar
-      if (formData.imageUrl) {
-        console.log('🗑️ Removing image from storage...');
-        await deleteProductImage(formData.imageUrl);
-      }
-      
-      // Hapus dari form
-      setFormData(prev => ({ ...prev, imageUrl: '' }));
-      
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
-      
-    } catch (error) {
-      console.error('Error removing image:', error);
-      alert('Gagal menghapus gambar. Coba lagi.');
+    setFormData(prev => ({ ...prev, imageUrl: '' }));
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
     }
   };
 
@@ -448,7 +415,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           console.error('Update errors:', error);
           return;
         }
-
+  
         // Update local state
         onUpdateProducts(
           products.map(p =>

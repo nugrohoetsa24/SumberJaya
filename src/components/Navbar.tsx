@@ -1,6 +1,5 @@
 import React from 'react';
 import logo from '../assets/logo.png';
-import React from 'react';
 import { Lock, LogOut } from 'lucide-react';
 
 interface NavbarProps {

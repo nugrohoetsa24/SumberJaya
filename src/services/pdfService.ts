@@ -79,7 +79,7 @@ const drawSingleProductFlyer = async (product: Product): Promise<jsPDF> => {
   doc.text('DIGITAL PRODUCT FLYER', pageWidth - 15, 25, { align: 'right' });
 
   // Product Image
-  const imgData = await getBase64Image(product.imageUrl || 'https://via.placeholder.com/600');
+  const imgData = await getBase64Image(product.imageUrl);
   if (imgData) {
     doc.setDrawColor(230, 230, 230);
     doc.roundedRect(14.5, 54.5, 181, 121, 2, 2, 'D');
@@ -180,8 +180,20 @@ export const pdfService = {
     const itemHeight = 45;
     const imgSize = 35;
 
-    for (const category of categories) {
-      const items = products.filter(p => p.category === category.name);
+    // Fallback: jika categories kosong, ambil dari produk
+const safeCategories =
+categories.length > 0
+  ? categories
+  : Array.from(
+      new Set(products.map(p => p.category))
+    ).map(name => ({ id: name, name }));
+
+    for (const category of safeCategories) {
+      const items = products.filter(
+        p =>
+          p.category?.trim().toLowerCase() ===
+          category.name?.trim().toLowerCase()
+      );    
       if (!items.length) continue;
 
       if (currentY + 30 > pageHeight - 20) {
@@ -209,7 +221,7 @@ export const pdfService = {
         doc.setDrawColor(240, 240, 240);
         doc.roundedRect(margin, currentY, imgSize, imgSize, 1, 1);
 
-        const pImg = await getBase64Image(product.imageUrl || 'https://via.placeholder.com/150');
+        const pImg = await getBase64Image(product.imageUrl || '');
         if (pImg) {
           doc.addImage(pImg, 'PNG', margin + 1, currentY + 1, imgSize - 2, imgSize - 2);
         }

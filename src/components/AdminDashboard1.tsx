@@ -1,17 +1,16 @@
 import { supabase } from '../lib/supabase';
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   Plus, Upload, Download, Trash2, Edit2, X, Image as ImageIcon, 
-  Save, UserPlus, Shield, AlertTriangle, CheckCircle2, 
-  LayoutGrid, List as ListIcon, Search, Filter, RotateCcw,
-  ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
-  ArrowUpDown, DollarSign, User, Clock
+  Save, Settings, UserPlus, Shield, AlertTriangle, CheckCircle2, 
+  LayoutGrid, List as ListIcon, MoreVertical, Info, Clock, User,
+  RotateCcw
 } from 'lucide-react';
-import type { Product, Category, AdminUser, HistoryLog } from '../types';
+import { Product, Category, AdminUser, ViewMode, HistoryLog } from '../types';
 import { parseExcel, exportToExcel } from '../services/excelService';
-import { uploadProductImage, deleteProductImage } from '../services/storageService';
+import { storageService } from '../services/storageService';
 import { pdfService } from '../services/pdfService';
-import { AdminManagement } from './AdminManagement';
+import { uploadProductImage, deleteProductImage } from '../services/storageService';
 
 interface AdminDashboardProps {
   products: Product[];
@@ -29,9 +28,6 @@ interface ImportSummary {
   newCategories: number;
 }
 
-// Tipe untuk sorting
-type SortOption = 'name-asc' | 'name-desc' | 'price-asc' | 'price-desc' | 'updated-desc' | 'updated-asc';
-
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ 
   products, 
   categories, 
@@ -42,17 +38,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   adminUsername
 }) => {
   const [activeTab, setActiveTab] = useState<'products' | 'categories' | 'import' | 'history' | 'settings'>('products');
-  const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
+  const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [historyLogs, setHistoryLogs] = useState<HistoryLog[]>([]);
-  
-  // STATE UNTUK FILTER & PAGINATION
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<string>('all');
-  const [sortBy, setSortBy] = useState<SortOption>('updated-desc');
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 20;
   
   // Notification states
   const [showImportSuccess, setShowImportSuccess] = useState(false);
@@ -66,14 +55,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [uploadingImage, setUploadingImage] = useState(false);
   
   // Form State
-  const [formData, setFormData] = useState<Partial<Product>>({
-    code: '',
-    name: '',
-    price: 0,
-    category: '',
-    description: '',
-    imageUrl: ''
-  });
+  const [formData, setFormData] = useState<Partial<Product>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // New Category State
@@ -83,66 +65,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [admins, setAdmins] = useState<AdminUser[]>([]);
   const [newAdmin, setNewAdmin] = useState({ username: '', password: '' });
 
-  // Fetch admins from database
-  const fetchAdmins = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('admin_users')
-        .select('id, username, email, created_at')
-        .order('created_at', { ascending: false });
-
-      if (error) {
-        console.error('Error fetching admins:', error);
-        return;
-      }
-
-      const transformedAdmins = data?.map(admin => ({
-        id: admin.id,
-        username: admin.username,
-        email: admin.email,
-        createdAt: admin.created_at
-      })) || [];
-
-      setAdmins(transformedAdmins);
-    } catch (error) {
-      console.error('Error in fetchAdmins:', error);
-    }
-  };
-
-  // Fetch history logs from database
-  const fetchHistoryLogs = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('history_logs')
-        .select('*')
-        .order('timestamp', { ascending: false })
-        .limit(100);
-
-      if (error) {
-        console.error('Error fetching history:', error);
-        return;
-      }
-
-      const transformedLogs = data?.map(log => ({
-        id: log.id,
-        username: log.username,
-        action: log.action,
-        productName: log.product_name,
-        productCode: log.product_code,
-        timestamp: log.timestamp
-      })) || [];
-
-      setHistoryLogs(transformedLogs);
-    } catch (error) {
-      console.error('Error in fetchHistoryLogs:', error);
-    }
-  };
-
   useEffect(() => {
-    fetchAdmins();
-    fetchHistoryLogs();
+    setAdmins(storageService.getAdmins());
+    setHistoryLogs(storageService.getHistory());
   }, []);
 
+  
   useEffect(() => {
     if (productToEdit) {
       setEditingProduct(productToEdit);
@@ -155,57 +83,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   }, [productToEdit, onClearProductToEdit]);
 
-  // 🔍 FUNGSI FILTER & SORTING
-  const filteredAndSortedProducts = useMemo(() => {
-    let filtered = [...products];
-    
-    // Filter berdasarkan pencarian
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
-      filtered = filtered.filter(product => 
-        product.name.toLowerCase().includes(query) || 
-        product.code.toLowerCase().includes(query) ||
-        product.description?.toLowerCase().includes(query)
-      );
-    }
-    
-    // Filter berdasarkan kategori
-    if (selectedCategory !== 'all') {
-      filtered = filtered.filter(product => product.category === selectedCategory);
-    }
-    
-    // Sorting
-    filtered.sort((a, b) => {
-      switch (sortBy) {
-        case 'name-asc':
-          return a.name.localeCompare(b.name);
-        case 'name-desc':
-          return b.name.localeCompare(a.name);
-        case 'price-asc':
-          return a.price - b.price;
-        case 'price-desc':
-          return b.price - a.price;
-        case 'updated-asc':
-          return new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime();
-        case 'updated-desc':
-        default:
-          return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
-      }
+  const refreshLogs = () => {
+    setHistoryLogs(storageService.getHistory());
+  };
+
+  // Di AdminDashboard.tsx, tambahkan:
+useEffect(() => {
+  console.log('📦 Products loaded:', products);
+  products.forEach(p => {
+    console.log(`📸 Product ${p.code}:`, {
+      name: p.name,
+      imageUrl: p.imageUrl,
+      hasImage: !!p.imageUrl
     });
-    
-    return filtered;
-  }, [products, searchQuery, selectedCategory, sortBy]);
-
-  // 📄 PAGINATION CALCULATION
-  const totalPages = Math.ceil(filteredAndSortedProducts.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = startIndex + itemsPerPage;
-  const paginatedProducts = filteredAndSortedProducts.slice(startIndex, endIndex);
-
-  // Reset page ketika filter berubah
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchQuery, selectedCategory, sortBy]);
+  });
+}, [products]);
 
   const handleEdit = (product: Product) => {
     setEditingProduct(product);
@@ -226,88 +118,62 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       if (productToDelete.imageUrl) {
         await deleteProductImage(productToDelete.imageUrl);
       }
-      
-      // 2. Hapus produk dari database
-      const { error } = await supabase
-        .from('produk')
-        .delete()
-        .eq('id', productToDelete.id);
-
-      if (error) {
-        alert('Gagal menghapus produk');
-        console.error(error);
-        return;
-      }
-
-      // 3. Update UI (state)
-      onUpdateProducts(
-        products.filter(p => p.id !== productToDelete.id)
-      );
-
-      // 4. Add to history
-      await supabase
-        .from('history_logs')
-        .insert({
-          username: adminUsername,
-          action: 'HAPUS',
-          product_name: productToDelete.name,
-          product_code: productToDelete.code,
-          timestamp: new Date().toISOString()
-        });
-
-      fetchHistoryLogs();
-      setProductToDelete(null);
-      
-    } catch (error) {
-      console.error('Error deleting product:', error);
-      alert('Terjadi kesalahan saat menghapus produk');
+  
+    const { error } = await supabase
+      .from('produk')
+      .delete()
+      .eq('id', productToDelete.id);
+  
+    if (error) {
+      alert('Gagal menghapus produk');
+      console.error(error);
+      return;
     }
+  
+    // update UI (state)
+    onUpdateProducts(
+      products.filter(p => p.id !== productToDelete.id)
+    );
+  
+    storageService.addHistory({
+      username: adminUsername,
+      action: 'HAPUS',
+      productName: productToDelete.name,
+      productCode: productToDelete.code,
+    });
+  
+    refreshLogs();
+    setProductToDelete(null);
   };
+  
 
   const initiateDeleteCategory = (category: Category) => {
     setCategoryToDelete(category);
   };
 
-  const confirmDeleteCategory = async () => {
-    if (!categoryToDelete) return;
+  const confirmDeleteCategory = () => {
+    if (categoryToDelete) {
+      // Cek apakah ada produk yang masih menggunakan kategori ini
+      const productsInCategory = products.filter(p => p.category === categoryToDelete.name);
+      if (productsInCategory.length > 0) {
+        alert(`Gagal menghapus: Kategori "${categoryToDelete.name}" masih digunakan oleh ${productsInCategory.length} produk. Silahkan ubah kategori produk tersebut terlebih dahulu.`);
+        setCategoryToDelete(null);
+        return;
+      }
 
-    // Cek apakah ada produk yang masih menggunakan kategori ini
-    const productsInCategory = products.filter(p => p.category === categoryToDelete.name);
-    if (productsInCategory.length > 0) {
-      alert(`Gagal menghapus: Kategori "${categoryToDelete.name}" masih digunakan oleh ${productsInCategory.length} produk. Silahkan ubah kategori produk tersebut terlebih dahulu.`);
-      setCategoryToDelete(null);
-      return;
-    }
+      const updatedCategories = categories.filter(c => c.id !== categoryToDelete.id);
+      onUpdateCategories(updatedCategories);
 
-    // Delete from database
-    const { error } = await supabase
-      .from('category')
-      .delete()
-      .eq('id', categoryToDelete.id);
-
-    if (error) {
-      alert('Gagal menghapus kategori');
-      console.error(error);
-      return;
-    }
-
-    // Update UI
-    const updatedCategories = categories.filter(c => c.id !== categoryToDelete.id);
-    onUpdateCategories(updatedCategories);
-
-    // Add to history
-    await supabase
-      .from('history_logs')
-      .insert({
+      storageService.addHistory({
         username: adminUsername,
         action: 'HAPUS_KATEGORI',
-        product_name: categoryToDelete.name,
-        product_code: 'KATEGORI',
-        timestamp: new Date().toISOString()
+        productName: categoryToDelete.name,
+        productCode: 'KATEGORI'
       });
+      refreshLogs();
 
-    fetchHistoryLogs();
-    setCategoryToDelete(null);
+      setCategoryToDelete(null);
+    }
   };
 
   const handleAddNew = () => {
@@ -330,7 +196,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       if (!file) {
         console.error('❌ No file provided');
         alert('Silakan pilih file gambar terlebih dahulu.');
-        throw new Error('No file provided');
+        return;
       }
       
       console.log('📄 File details:', {
@@ -343,24 +209,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       // Validasi sederhana
       if (file.size === 0) {
         alert('File kosong. Silakan pilih file lain.');
-        throw new Error('File is empty');
+        return;
       }
       
       if (file.size > 5 * 1024 * 1024) {
         alert('File terlalu besar (maksimal 5MB)');
-        throw new Error('File too large');
-      }
-
-      // Validasi tipe file
-      if (!file.type.startsWith('image/')) {
-        alert('File harus berupa gambar (JPG, PNG, dll)');
-        throw new Error('Invalid file type');
-      }
-      
-      // Hapus gambar lama jika ada (saat edit produk)
-      if (editingProduct && editingProduct.imageUrl && editingProduct.imageUrl !== formData.imageUrl) {
-        console.log('🗑️ Deleting old image before upload...');
-        await deleteProductImage(editingProduct.imageUrl);
+        return;
       }
       
       // Tampilkan loading
@@ -389,27 +243,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
   
-  const handleRemoveImage = async (e: React.MouseEvent) => {
+  const handleRemoveImage = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    
-    try {
-      // Hapus dari storage jika ada gambar
-      if (formData.imageUrl) {
-        console.log('🗑️ Removing image from storage...');
-        await deleteProductImage(formData.imageUrl);
-      }
-      
-      // Hapus dari form
-      setFormData(prev => ({ ...prev, imageUrl: '' }));
-      
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
-      
-    } catch (error) {
-      console.error('Error removing image:', error);
-      alert('Gagal menghapus gambar. Coba lagi.');
+    setFormData(prev => ({ ...prev, imageUrl: '' }));
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
     }
   };
 
@@ -421,116 +260,64 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       return;
     }
   
-    const productData = {
-      name: formData.name,
-      code: formData.code,
-      price: Number(formData.price),
-      category: formData.category || 'Uncategorized',
-      description: formData.description || '',
-      image_url: formData.imageUrl || '',
-      updated_at: new Date().toISOString()
-    };
+    // =========================
+    // UPDATE menggunakan RPC
+    // =========================
+    if (editingProduct) {
+      const { data, error } = await supabase
+        .rpc('update_product', {
+          product_id: editingProduct.id,
+          product_name: formData.name,
+          product_code: formData.code,
+          product_price: Number(formData.price),
+          product_category: formData.category || null,
+          product_description: formData.description || null,
+          product_image_url: formData.imageUrl || null
+        });
   
-    try {
-      if (editingProduct) {
-        // Update existing product
-        const { error } = await supabase
-          .from('produk')
-          .upsert({
-            id: editingProduct.id,
-            ...productData
-          })
-          .select()
-          .single();
-  
-        if (error) {
-          alert('Gagal mengupdate produk');
-          console.error('Update errors:', error);
-          return;
-        }
-
-        // Update local state
-        onUpdateProducts(
-          products.map(p =>
-            p.id === editingProduct.id ? { 
-              ...p, 
-              ...formData,
-              updatedAt: new Date().toISOString()
-            } : p
-          )
-        );
-
-        // Add to history
-        await supabase
-          .from('history_logs')
-          .insert({
-            username: adminUsername,
-            action: 'EDIT',
-            product_name: formData.name,
-            product_code: formData.code,
-            timestamp: new Date().toISOString()
-          });
-      } else {
-        // Create new product
-        const { data, error } = await supabase
-          .from('produk')
-          .insert(productData)
-          .select()
-          .single();
-  
-        if (error) {
-          alert('Gagal menambahkan produk');
-          console.error(error);
-          return;
-        }
-  
-        // Add to local state
-        const newProduct: Product = {
-          id: data.id,
-          code: data.code,
-          name: data.name,
-          price: Number(data.price),
-          category: data.category || 'Uncategorized',
-          description: data.description || '',
-          imageUrl: data.image_url || '',
-          updatedAt: data.updated_at || new Date().toISOString()
-        };
-  
-        onUpdateProducts([newProduct, ...products]);
-
-        // Add to history
-        await supabase
-          .from('history_logs')
-          .insert({
-            username: adminUsername,
-            action: 'TAMBAH',
-            product_name: formData.name,
-            product_code: formData.code,
-            timestamp: new Date().toISOString()
-          });
+      if (error) {
+        alert('Gagal mengupdate produk');
+        console.error(error);
+        return;
       }
-
-      // Refresh history
-      fetchHistoryLogs();
   
-      // Close form
-      setIsFormOpen(false);
-      setEditingProduct(null);
-      setFormData({
-        code: '',
-        name: '',
-        price: 0,
-        category: '',
-        description: '',
-        imageUrl: ''
-      });
-  
-    } catch (error) {
-      console.error('Error saving product:', error);
-      alert('Terjadi kesalahan saat menyimpan produk');
+      onUpdateProducts(
+        products.map(p =>
+          p.id === editingProduct.id ? { ...p, ...formData } : p
+        )
+      );
     }
+  
+    // =========================
+    // INSERT
+    // =========================
+    else {
+      const { data, error } = await supabase
+        .from('produk')
+        .insert({
+          name: formData.name,
+          code: formData.code,
+          price: Number(formData.price),
+          category: formData.category,
+          description: formData.description,
+          image_url: formData.imageUrl,
+        })
+        .select()
+        .single();
+  
+      if (error) {
+        alert('Gagal menambahkan produk');
+        console.error(error);
+        return;
+      }
+  
+      onUpdateProducts([data, ...products]);
+    }
+  
+    setIsFormOpen(false);
+    setEditingProduct(null);
   };
-
+ 
   const handleExcelImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -542,11 +329,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       let newProducts = 0;
       let updatedProducts = 0;
   
-      // 1. PROSES IMPORT PRODUK
       for (const item of importedData) {
         if (!item.code || !item.name || item.price === undefined) continue;
         
-        // Track kategori baru
         if (item.category && !categories.some(c => c.name === item.category)) {
           newCategoriesFromImport.add(item.category);
         }
@@ -568,7 +353,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           .single();
   
         if (error) {
-          console.error('Gagal import produk:', error);
+          console.error('Gagal import:', error);
           continue;
         }
   
@@ -576,283 +361,123 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         exists ? updatedProducts++ : newProducts++;
       }
 
-      // 2. TAMBAHKAN KATEGORI BARU KE DATABASE
       if (newCategoriesFromImport.size > 0) {
         const categoriesToAdd = Array.from(newCategoriesFromImport).map(name => ({
           name: name.trim()
         }));
 
         const { error: categoryError } = await supabase
-          .from('category')
-          .upsert(categoriesToAdd, { onConflict: 'name' });
+        .from('category')
+        .upsert(categoriesToAdd, { onConflict: 'name' });
 
-        if (categoryError) {
-          console.error('Gagal menambah kategori:', categoryError);
-        }
+      if (categoryError) {
+        console.error('Gagal menambah kategori:', categoryError);
       }
+    }
 
-      // 3. REFRESH SEMUA DATA DARI DATABASE
+      // 🔄 reload produk dari database
+      const { data: freshProducts } = await supabase
+        .from('produk')
+        .select('*')
+        .order('updated_at', { ascending: false });
+
       const refreshAllData = async () => {
-        console.log('🔄 Memulai refresh data...');
-        
-        // Refresh produk
-        const { data: freshProducts, error: productsError } = await supabase
-          .from('produk')
-          .select('*')
-          .order('updated_at', { ascending: false });
+          // Refresh produk
+          const { data: freshProducts } = await supabase
+            .from('produk')
+            .select('*')
+            .order('updated_at', { ascending: false });
+          }
 
-        if (productsError) {
-          console.error('Gagal refresh produk:', productsError);
-        } else if (freshProducts) {
-          const transformedProducts = freshProducts.map((p: any) => ({
+      if (freshProducts) {
+        onUpdateProducts(
+          freshProducts.map(p => ({
             id: p.id,
             name: p.name,
             code: p.code,
-            price: Number(p.price) || 0,
-            category: p.category || 'Uncategorized',
-            description: p.description || '',
-            imageUrl: p.image_url || '',
-            updatedAt: p.updated_at || p.created_at,
-          }));
-          onUpdateProducts(transformedProducts);
-          console.log('✅ Produk direfresh:', transformedProducts.length);
-        }
-
-        // Refresh kategori
-        const { data: freshCategories, error: categoriesError } = await supabase
-          .from('category')
-          .select('*')
-          .order('name');
-
-        if (categoriesError) {
-          console.error('Gagal refresh kategori:', categoriesError);
-        } else if (freshCategories) {
-          const transformedCategories = freshCategories.map((c: any) => ({
-            id: c.id,
-            name: c.name
-          }));
-          onUpdateCategories(transformedCategories);
-          console.log('✅ Kategori direfresh:', transformedCategories.length);
-        }
-      };
-
-      // 4. PANGGIL FUNGSI REFRESH
-      await refreshAllData();
-
-      // 5. SET SUMMARY DAN NOTIFIKASI
-      const summary: ImportSummary = {
-        newProducts,
-        updatedProducts,
-        newCategories: newCategoriesFromImport.size
-      };
-
-      setImportSummary(summary);
+            price: p.price,
+            category: p.category,
+            description: p.description,
+            imageUrl: p.image_url,
+            updatedAt: p.updated_at,
+          }))
+        );
+      }
+  
+      storageService.addHistory({
+        id: `log_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        username: adminUsername,
+        action: 'TAMBAH',
+        productName: `Import Excel (${newProducts + updatedProducts})`,
+        productCode: 'EXCEL',
+      });
+  
+      refreshLogs();
       setShowImportSuccess(true);
-
-      // Add import to history
-      await supabase
-        .from('history_logs')
-        .insert({
-          username: adminUsername,
-          action: 'IMPORT_EXCEL',
-          product_name: `Import ${newProducts + updatedProducts} produk, ${newCategoriesFromImport.size} kategori`,
-          product_code: 'EXCEL',
-          timestamp: new Date().toISOString()
-        });
-
-      fetchHistoryLogs();
+  
       e.target.value = '';
-      
-      console.log('🎉 Import selesai dengan summary:', summary);
     } catch (err) {
-      console.error('❌ Gagal import Excel:', err);
-      alert('Gagal import Excel: ' + (err as Error).message);
+      console.error(err);
+      alert('Gagal import Excel');
+    }
+  };
+  
+
+  const handleAddCategory = () => {
+    const trimmed = newCategory.trim();
+    if (trimmed && !categories.some(c => c.name.toLowerCase() === trimmed.toLowerCase())) {
+      onUpdateCategories([...categories, { id: `cat_${Date.now()}`, name: trimmed }]);
+      
+      storageService.addHistory({
+        username: adminUsername,
+        action: 'TAMBAH_KATEGORI',
+        productName: trimmed,
+        productCode: 'KATEGORI'
+      });
+      refreshLogs();
+      
+      setNewCategory('');
     }
   };
 
-  const handleAddCategory = async () => {
-    const trimmed = newCategory.trim();
-    if (!trimmed) return;
-
-    if (categories.some(c => c.name.toLowerCase() === trimmed.toLowerCase())) {
-      alert('Kategori sudah ada!');
+  const handleAddAdmin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newAdmin.username || !newAdmin.password) return;
+    if (admins.some(a => a.username === newAdmin.username)) {
+      alert('Username sudah digunakan!');
       return;
     }
+    const updatedAdmins = [...admins, newAdmin];
+    setAdmins(updatedAdmins);
+    storageService.saveAdmins(updatedAdmins);
+    setNewAdmin({ username: '', password: '' });
+  };
 
-    try {
-      const { data, error } = await supabase
-        .from('category')
-        .insert({ name: trimmed })
-        .select()
-        .single();
-
-      if (error) {
-        alert('Gagal menambah kategori');
-        console.error(error);
-        return;
-      }
-
-      // Update local state
-      const newCategoryItem: Category = {
-        id: data.id,
-        name: data.name
-      };
-      
-      onUpdateCategories([...categories, newCategoryItem]);
-
-      // Add to history
-      await supabase
-        .from('history_logs')
-        .insert({
-          username: adminUsername,
-          action: 'TAMBAH_KATEGORI',
-          product_name: trimmed,
-          product_code: 'KATEGORI',
-          timestamp: new Date().toISOString()
-        });
-
-      fetchHistoryLogs();
-      setNewCategory('');
-    } catch (error) {
-      console.error('Error adding category:', error);
-      alert('Terjadi kesalahan saat menambah kategori');
+  const handleDeleteAdmin = (username: string) => {
+    if (admins.length <= 1) {
+      alert('Tidak bisa menghapus admin terakhir!');
+      return;
+    }
+    if (confirm(`Hapus admin "${username}"?`)) {
+      const updatedAdmins = admins.filter(a => a.username !== username);
+      setAdmins(updatedAdmins);
+      storageService.saveAdmins(updatedAdmins);
     }
   };
 
-  const getActionStyles = (action: string) => {
+  const getActionStyles = (action: HistoryLog['action']) => {
     switch (action) {
-      case 'TAMBAH':
-      case 'IMPORT_EXCEL':
-        return 'bg-green-100 text-green-700';
-      case 'EDIT':
-        return 'bg-blue-100 text-blue-700';
-      case 'HAPUS':
-        return 'bg-red-100 text-red-700';
-      case 'TAMBAH_KATEGORI':
-        return 'bg-emerald-100 text-emerald-800';
-      case 'HAPUS_KATEGORI':
-        return 'bg-orange-100 text-orange-800';
-      default:
-        return 'bg-gray-100 text-gray-700';
+      case 'TAMBAH': return 'bg-green-100 text-green-700';
+      case 'EDIT': return 'bg-blue-100 text-blue-700';
+      case 'HAPUS': return 'bg-red-100 text-red-700';
+      case 'TAMBAH_KATEGORI': return 'bg-emerald-100 text-emerald-800';
+      case 'HAPUS_KATEGORI': return 'bg-orange-100 text-orange-800';
+      default: return 'bg-gray-100 text-gray-700';
     }
   };
 
-  const formatActionName = (action: string) => {
+  const formatActionName = (action: HistoryLog['action']) => {
     return action.replace('_', ' ');
-  };
-
-  // 📊 RENDER PAGINATION CONTROLS
-  const renderPagination = () => {
-    const pageNumbers = [];
-    const maxVisiblePages = 5;
-    
-    let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
-    let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
-    
-    if (endPage - startPage + 1 < maxVisiblePages) {
-      startPage = Math.max(1, endPage - maxVisiblePages + 1);
-    }
-    
-    for (let i = startPage; i <= endPage; i++) {
-      pageNumbers.push(i);
-    }
-    
-    return (
-      <div className="flex items-center justify-between px-4 py-3 bg-white border-t border-gray-200 sm:px-6">
-        <div className="flex flex-1 justify-between sm:hidden">
-          <button
-            onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-            disabled={currentPage === 1}
-            className="relative inline-flex items-center px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            Previous
-          </button>
-          <button
-            onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-            disabled={currentPage === totalPages}
-            className="relative inline-flex items-center px-4 py-2 ml-3 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            Next
-          </button>
-        </div>
-        
-        <div className="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
-          <div>
-            <p className="text-sm text-gray-700">
-              Showing <span className="font-medium">{startIndex + 1}</span> to{' '}
-              <span className="font-medium">
-                {Math.min(endIndex, filteredAndSortedProducts.length)}
-              </span>{' '}
-              of <span className="font-medium">{filteredAndSortedProducts.length}</span> results
-              {searchQuery && (
-                <span className="ml-2 text-gray-500">
-                  for "<span className="font-medium">{searchQuery}</span>"
-                </span>
-              )}
-              {selectedCategory !== 'all' && (
-                <span className="ml-2 text-gray-500">
-                  in <span className="font-medium">{selectedCategory}</span>
-                </span>
-              )}
-            </p>
-          </div>
-          
-          <div>
-            <nav className="inline-flex -space-x-px rounded-md shadow-sm" aria-label="Pagination">
-              <button
-                onClick={() => setCurrentPage(1)}
-                disabled={currentPage === 1}
-                className="relative inline-flex items-center px-2 py-2 text-gray-400 rounded-l-md border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                title="First Page"
-              >
-                <ChevronsLeft className="h-5 w-5" />
-              </button>
-              
-              <button
-                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                disabled={currentPage === 1}
-                className="relative inline-flex items-center px-2 py-2 text-gray-400 border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                title="Previous Page"
-              >
-                <ChevronLeft className="h-5 w-5" />
-              </button>
-              
-              {pageNumbers.map(number => (
-                <button
-                  key={number}
-                  onClick={() => setCurrentPage(number)}
-                  className={`relative inline-flex items-center px-4 py-2 text-sm font-medium border ${
-                    currentPage === number
-                      ? 'z-10 bg-indigo-600 border-indigo-500 text-white'
-                      : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50'
-                  }`}
-                >
-                  {number}
-                </button>
-              ))}
-              
-              <button
-                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                disabled={currentPage === totalPages}
-                className="relative inline-flex items-center px-2 py-2 text-gray-400 border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                title="Next Page"
-              >
-                <ChevronRight className="h-5 w-5" />
-              </button>
-              
-              <button
-                onClick={() => setCurrentPage(totalPages)}
-                disabled={currentPage === totalPages}
-                className="relative inline-flex items-center px-2 py-2 text-gray-400 rounded-r-md border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                title="Last Page"
-              >
-                <ChevronsRight className="h-5 w-5" />
-              </button>
-            </nav>
-          </div>
-        </div>
-      </div>
-    );
   };
 
   return (
@@ -867,8 +492,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
+          {/* Tombol Lihat Katalog - Navigasi ke /katalog */}
           <a
-            href="/"
+            href="/katalog"
             className="flex items-center px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition shadow-md"
           >
             <LayoutGrid className="w-4 h-4 mr-2" />
@@ -910,11 +536,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               onClick={() => setActiveTab(tab)}
               className={`px-6 py-3 font-medium text-sm whitespace-nowrap capitalize ${activeTab === tab ? 'border-b-2 border-indigo-600 text-indigo-600' : 'text-gray-500 hover:text-gray-700'}`}
             >
-              {tab === 'products' ? 'Daftar Produk' : 
-               tab === 'categories' ? 'Kategori' : 
-               tab === 'import' ? 'Mass Edit' : 
-               tab === 'history' ? 'Riwayat' : 
-               'Pengaturan'}
+              {tab === 'products' ? 'Daftar Produk' : tab === 'categories' ? 'Kategori' : tab === 'import' ? 'Mass Edit' : tab === 'history' ? 'Riwayat' : 'Pengaturan'}
             </button>
           ))}
         </div>
@@ -943,187 +565,87 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       {/* TAB CONTENT - PRODUCTS */}
       {activeTab === 'products' && (
         <>
-          {/* FILTER BAR */}
-          <div className="mb-6 bg-white p-4 rounded-xl shadow-sm border border-gray-200">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              {/* SEARCH INPUT */}
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Search className="h-5 w-5 text-gray-400" />
-                </div>
-                <input
-                  type="text"
-                  placeholder="Cari produk atau kode..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10 pr-4 py-2 w-full border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
-                />
-              </div>
-              
-              {/* CATEGORY FILTER */}
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Filter className="h-5 w-5 text-gray-400" />
-                </div>
-                <select
-                  value={selectedCategory}
-                  onChange={(e) => setSelectedCategory(e.target.value)}
-                  className="pl-10 pr-4 py-2 w-full border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none bg-white"
-                >
-                  <option value="all">Semua Kategori</option>
-                  {categories.map(category => (
-                    <option key={category.id} value={category.name}>
-                      {category.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              
-              {/* SORT BY */}
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <ArrowUpDown className="h-5 w-5 text-gray-400" />
-                </div>
-                <select
-                  value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value as SortOption)}
-                  className="pl-10 pr-4 py-2 w-full border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none bg-white"
-                >
-                  <option value="updated-desc">Terbaru</option>
-                  <option value="updated-asc">Terlama</option>
-                  <option value="name-asc">Nama A-Z</option>
-                  <option value="name-desc">Nama Z-A</option>
-                  <option value="price-asc">Harga Terendah</option>
-                  <option value="price-desc">Harga Tertinggi</option>
-                </select>
-              </div>
-              
-              {/* RESET FILTERS */}
-              <button
-                onClick={() => {
-                  setSearchQuery('');
-                  setSelectedCategory('all');
-                  setSortBy('updated-desc');
-                }}
-                className="flex items-center justify-center px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
-              >
-                <RotateCcw className="h-4 w-4 mr-2" />
-                Reset Filter
-              </button>
-            </div>
-            
-            {/* FILTER INFO */}
-            <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
-              <span className="text-gray-600">
-                Menampilkan {paginatedProducts.length} dari {filteredAndSortedProducts.length} produk
-              </span>
-              {searchQuery && (
-                <span className="inline-flex items-center px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs">
-                  Pencarian: {searchQuery}
-                </span>
-              )}
-              {selectedCategory !== 'all' && (
-                <span className="inline-flex items-center px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs">
-                  Kategori: {selectedCategory}
-                </span>
-              )}
-            </div>
-          </div>
-
           {viewMode === 'list' ? (
-            <>
-              <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-sm text-gray-600">
-                    <thead className="bg-gray-50 text-xs uppercase font-semibold text-gray-500">
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm text-gray-600">
+                  <thead className="bg-gray-50 text-xs uppercase font-semibold text-gray-500">
+                    <tr>
+                      <th className="px-6 py-4">Produk</th>
+                      <th className="px-6 py-4">Kode</th>
+                      <th className="px-6 py-4">Kategori</th>
+                      <th className="px-6 py-4">Terakhir Diperbarui</th>
+                      <th className="px-6 py-4 text-right">Harga</th>
+                      <th className="px-6 py-4 text-center">Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {products.length === 0 ? (
                       <tr>
-                        <th className="px-6 py-4">Produk</th>
-                        <th className="px-6 py-4">Kode</th>
-                        <th className="px-6 py-4">Kategori</th>
-                        <th className="px-6 py-4">Terakhir Diperbarui</th>
-                        <th className="px-6 py-4 text-right">Harga</th>
-                        <th className="px-6 py-4 text-center">Aksi</th>
+                        <td colSpan={6} className="px-6 py-12 text-center text-gray-400">
+                          Belum ada produk. Silahkan tambah atau import.
+                        </td>
                       </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-200">
-                      {paginatedProducts.length === 0 ? (
-                        <tr>
-                          <td colSpan={6} className="px-6 py-12 text-center text-gray-400">
-                            {searchQuery || selectedCategory !== 'all' 
-                              ? 'Tidak ada produk yang sesuai dengan filter.' 
-                              : 'Belum ada produk. Silahkan tambah atau import.'}
-                          </td>
-                        </tr>
-                      ) : paginatedProducts.map((product) => (
-                        <tr key={product.id} className="hover:bg-gray-50 transition group">
-                          <td className="px-6 py-4">
-                            <div className="flex items-center">
-                              <div className="h-10 w-10 flex-shrink-0 bg-gray-100 rounded-lg overflow-hidden border border-gray-200">
-                                {product.imageUrl ? (
-                                  <img src={product.imageUrl} alt="" className="h-full w-full object-cover" />
-                                ) : (
-                                  <div className="h-full w-full flex items-center justify-center text-gray-400">
-                                    <ImageIcon className="w-4 h-4" />
-                                  </div>
-                                )}
-                              </div>
-                              <div className="ml-4">
-                                <div className="font-medium text-gray-900 line-clamp-1">{product.name}</div>
-                              </div>
+                    ) : products.map((product) => (
+                      <tr key={product.id} className="hover:bg-gray-50 transition group">
+                        <td className="px-6 py-4">
+                          <div className="flex items-center">
+                            <div className="h-10 w-10 flex-shrink-0 bg-gray-100 rounded-lg overflow-hidden border border-gray-200">
+                              {product.imageUrl ? (
+                                <img src={product.imageUrl} alt="" className="h-full w-full object-cover" />
+                              ) : (
+                                <div className="h-full w-full flex items-center justify-center text-gray-400">
+                                  <ImageIcon className="w-4 h-4" />
+                                </div>
+                              )}
                             </div>
-                          </td>
-                          <td className="px-6 py-4 font-mono text-xs">{product.code}</td>
-                          <td className="px-6 py-4">
-                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                              {product.category}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 text-gray-500 text-xs whitespace-nowrap">
-                            {product.updatedAt ? new Date(product.updatedAt).toLocaleString('id-ID', { 
-                              dateStyle: 'medium', 
-                              timeStyle: 'short' 
-                            }) : '-'}
-                          </td>
-                          <td className="px-6 py-4 text-right font-medium text-gray-900">
-                            Rp {product.price.toLocaleString('id-ID')}
-                          </td>
-                          <td className="px-6 py-4 text-center">
-                            <div className="flex justify-center space-x-2">
-                              <button 
-                                onClick={() => handleEdit(product)} 
-                                className="p-1.5 hover:bg-indigo-50 text-indigo-600 rounded-md transition" 
-                                title="Edit Produk"
-                              >
-                                <Edit2 className="w-4 h-4" />
-                              </button>
-                              <button 
-                                onClick={(e) => initiateDeleteProduct(product, e)} 
-                                className="p-1.5 hover:bg-red-50 text-red-600 rounded-md transition"
-                                title="Hapus Produk"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
+                            <div className="ml-4">
+                              <div className="font-medium text-gray-900">{product.name}</div>
                             </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                
-                {/* PAGINATION */}
-                {totalPages > 1 && renderPagination()}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 font-mono text-xs">{product.code}</td>
+                        <td className="px-6 py-4">
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                            {product.category}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-gray-500 text-xs whitespace-nowrap">
+                          {product.updatedAt ? new Date(product.updatedAt).toLocaleString('id-ID', { 
+                            dateStyle: 'medium', 
+                            timeStyle: 'short' 
+                          }) : '-'}
+                        </td>
+                        <td className="px-6 py-4 text-right font-medium text-gray-900">
+                          Rp {product.price.toLocaleString('id-ID')}
+                        </td>
+                        <td className="px-6 py-4 text-center">
+                          <div className="flex justify-center space-x-2">
+                            <button onClick={() => handleEdit(product)} className="p-1.5 hover:bg-indigo-50 text-indigo-600 rounded-md transition" title="Edit Produk">
+                              <Edit2 className="w-4 h-4" />
+                            </button>
+                            <button 
+                              onClick={(e) => initiateDeleteProduct(product, e)} 
+                              className="p-1.5 hover:bg-red-50 text-red-600 rounded-md transition"
+                              title="Hapus Produk"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-            </>
+            </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-              {paginatedProducts.length === 0 ? (
+              {products.length === 0 ? (
                 <div className="col-span-full py-20 text-center text-gray-400">
-                  {searchQuery || selectedCategory !== 'all' 
-                    ? 'Tidak ada produk yang sesuai dengan filter.' 
-                    : 'Belum ada produk. Silahkan tambah atau import.'}
+                  Belum ada produk. Silahkan tambah atau import.
                 </div>
-              ) : paginatedProducts.map((product) => (
+              ) : products.map((product) => (
                 <div key={product.id} className="group relative bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden flex flex-col h-full hover:shadow-md transition-shadow">
                   <div className="absolute top-2 right-2 flex gap-1 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button 
@@ -1164,13 +686,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </div>
                 </div>
               ))}
-              
-              {/* PAGINATION UNTUK GRID VIEW */}
-              {viewMode === 'grid' && totalPages > 1 && (
-                <div className="col-span-full mt-6">
-                  {renderPagination()}
-                </div>
-              )}
             </div>
           )}
         </>
@@ -1227,19 +742,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <div className="flex flex-col items-center gap-4">
               <label className="cursor-pointer px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition shadow-md">
                 <span>Pilih File Excel</span>
-                <input 
-                  type="file" 
-                  accept=".xlsx, .xls" 
-                  className="hidden" 
-                  onChange={handleExcelImport}
-                  onClick={(e) => {
-                    (e.target as HTMLInputElement).value = '';
-                  }}
-                />
+                <input type="file" accept=".xlsx, .xls" className="hidden" onChange={handleExcelImport} />
               </label>
-              <p className="text-xs text-gray-500 mt-2">
-                Format Excel harus memiliki kolom: code, name, price, category, description, imageUrl
-              </p>
             </div>
           </div>
         </div>
@@ -1254,7 +758,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <h3 className="font-bold text-gray-900">Riwayat Aktivitas Admin</h3>
             </div>
             <button 
-              onClick={fetchHistoryLogs}
+              onClick={refreshLogs}
               className="p-2 text-gray-400 hover:text-indigo-600 transition-colors"
               title="Segarkan Riwayat"
             >
@@ -1303,7 +807,67 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
       {/* TAB CONTENT - SETTINGS */}
       {activeTab === 'settings' && (
-        <AdminManagement currentAdminUsername={adminUsername} />
+        <div className="max-w-3xl">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            <div className="p-6 border-b border-gray-200">
+              <div className="flex items-center space-x-2">
+                <Shield className="w-6 h-6 text-indigo-600" />
+                <h3 className="text-lg font-semibold text-gray-900">Manajemen Admin</h3>
+              </div>
+            </div>
+            <div className="p-6 bg-gray-50 border-b border-gray-200">
+              <h4 className="text-sm font-medium text-gray-700 mb-4 flex items-center">
+                <UserPlus className="w-4 h-4 mr-2" />
+                Tambah Admin Baru
+              </h4>
+              <form onSubmit={handleAddAdmin} className="flex flex-col md:flex-row gap-4">
+                <input 
+                  type="text" 
+                  placeholder="Username" 
+                  required
+                  value={newAdmin.username}
+                  onChange={(e) => setNewAdmin({...newAdmin, username: e.target.value})}
+                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none bg-white text-gray-900"
+                />
+                <input 
+                  type="text" 
+                  placeholder="Password" 
+                  required
+                  value={newAdmin.password}
+                  onChange={(e) => setNewAdmin({...newAdmin, password: e.target.value})}
+                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none bg-white text-gray-900"
+                />
+                <button type="submit" className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition shadow-sm font-medium">
+                  Tambah
+                </button>
+              </form>
+            </div>
+            <div className="p-6">
+              <h4 className="text-sm font-medium text-gray-700 mb-4">Daftar Admin</h4>
+              <div className="space-y-3">
+                {admins.map((admin, index) => (
+                  <div key={index} className="flex items-center justify-between p-4 bg-white border border-gray-200 rounded-lg shadow-sm">
+                    <div className="flex items-center space-x-3">
+                      <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold">
+                        {admin.username.charAt(0).toUpperCase()}
+                      </div>
+                      <div>
+                        <p className="font-medium text-gray-900">{admin.username}</p>
+                      </div>
+                    </div>
+                    <button 
+                      onClick={() => handleDeleteAdmin(admin.username)}
+                      className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                      title="Hapus Admin"
+                    >
+                      <Trash2 className="w-5 h-5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* MODAL IMPORT SUCCESS */}
@@ -1497,7 +1061,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         onChange={e => setFormData({ ...formData, category: e.target.value })} 
                         className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md bg-white text-gray-900"
                       >
-                        <option value="">Pilih Kategori</option>
                         {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
                       </select>
                     </div>

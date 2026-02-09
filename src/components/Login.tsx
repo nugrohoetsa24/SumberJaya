@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
-import { Lock } from 'lucide-react';
-import { storageService } from '../services/storageService';
+import { supabase } from '../lib/supabase';
 
 interface LoginProps {
   onLoginSuccess: (username: string) => void;
@@ -9,78 +8,108 @@ interface LoginProps {
 export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (storageService.verifyLogin(username, password)) {
-      onLoginSuccess(username);
-    } else {
-      setError('Username atau password salah');
+    setLoading(true);
+    setError('');
+
+    try {
+      console.log('🔐 Mencoba login dengan admin_users...');
+      
+      // Query ke tabel admin_users
+      const { data: adminData, error: adminError } = await supabase
+        .from('admin_users')
+        .select('*')
+        .eq('username', username.trim())
+        .maybeSingle();
+
+      console.log('📊 Admin data response:', { adminData, adminError });
+
+      if (adminError) {
+        console.error('❌ Error query admin_users:', adminError);
+        throw new Error('Terjadi kesalahan pada server. Silakan coba lagi.');
+      }
+
+      if (!adminData) {
+        console.log('👤 Admin tidak ditemukan');
+        throw new Error('Username atau password salah');
+      }
+
+      // Verifikasi password (plain text untuk testing)
+      if (password === adminData.password_hash) {
+        console.log('✅ Login admin berhasil:', adminData.username);
+        onLoginSuccess(adminData.username);
+      } else {
+        console.log('❌ Password tidak cocok');
+        throw new Error('Username atau password salah');
+      }
+      
+    } catch (err: any) {
+      console.error('🔥 Login error:', err);
+      setError(err.message || 'Login gagal. Coba gunakan username: admin, password: admin123');
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <div className="bg-white py-8 px-4 shadow-xl rounded-2xl sm:px-10 border border-gray-100">
-      <div className="sm:mx-auto sm:w-full sm:max-w-md mb-6 text-center">
-        <div className="mx-auto h-12 w-12 bg-blue-100 rounded-full flex items-center justify-center mb-4">
-          <Lock className="h-6 w-6 text-blue-700" />
+    <div className="bg-white rounded-lg shadow-md p-8 max-w-md w-full">
+      <h2 className="text-2xl font-bold text-center text-gray-800 mb-2">
+        Login
+      </h2>
+      
+      
+      
+      {error && (
+        <div className="mb-4 p-3 bg-red-100 text-red-800 rounded-md text-sm">
+          <strong>Error:</strong> {error}
         </div>
-        <h2 className="text-3xl font-extrabold text-gray-900">Admin Login</h2>
-        <p className="text-gray-500 mt-2 text-sm">Masuk untuk mengelola stok dan produk</p>
-      </div>
-
-      <form className="space-y-6" onSubmit={handleSubmit}>
+      )}
+      
+      <form onSubmit={handleSubmit} className="space-y-6">
         <div>
-          <label htmlFor="username" className="block text-sm font-medium text-gray-700">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
             Username
           </label>
-          <div className="mt-1">
-            <input
-              id="username"
-              name="username"
-              type="text"
-              required
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm bg-white text-gray-900"
-            />
-          </div>
+          <input
+            type="text"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            className="w-full px-4 py-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            placeholder="Username"
+            required
+            disabled={loading}
+          />
         </div>
-
+        
         <div>
-          <label htmlFor="password" className="block text-sm font-medium text-gray-700">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
             Password
           </label>
-          <div className="mt-1">
-            <input
-              id="password"
-              name="password"
-              type="password"
-              required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm bg-white text-gray-900"
-            />
-          </div>
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="w-full px-4 py-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            placeholder="Password"
+            required
+            disabled={loading}
+          />
         </div>
-
-        {error && (
-          <div className="text-red-500 text-sm bg-red-50 p-2 rounded border border-red-100">
-            {error}
-          </div>
-        )}
-
-        <div>
-          <button
-            type="submit"
-            className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-700 hover:bg-blue-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
-          >
-            Masuk Dashboard
-          </button>
-        </div>
+        
+        <button
+          type="submit"
+          disabled={loading}
+          className="w-full py-3 px-4 bg-blue-600 text-white font-medium rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        >
+          {loading ? 'Memproses...' : 'Login'}
+        </button>
       </form>
+      
+      
     </div>
   );
 };
