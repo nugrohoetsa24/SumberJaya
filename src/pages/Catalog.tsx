@@ -10,7 +10,7 @@ interface CatalogProps {
   categories: Category[];
   isAdmin: boolean;
   onEditProduct: (product: Product) => void;
-  onDeleteProduct: (id: string) => void;
+  onDeleteProduct: (product: Product) => void;
 }
 
 export const Catalog: React.FC<CatalogProps> = ({ 
@@ -96,7 +96,7 @@ export const Catalog: React.FC<CatalogProps> = ({
 
   const handleDeleteClick = (product: Product) => {
     if (window.confirm(`Apakah anda yakin ingin menghapus "${product.name}"?`)) {
-      onDeleteProduct(product.id);
+      onDeleteProduct(product);
       setSelectedProduct(null);
     }
   };

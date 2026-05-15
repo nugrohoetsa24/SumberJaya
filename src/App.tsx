@@ -247,12 +247,13 @@ const App: React.FC = () => {
     setDashboardKey(prev => prev + 1);
   };
 
-  const handleDeleteFromCatalog = async (productId: string) => {
+  const handleDeleteFromCatalog = async (product: Product) => {
     try {
       const { error } = await supabase
         .from('produk')
         .delete()
-        .eq('id', productId);
+        .eq('id', product.id)
+        .eq('code', product.code);
 
       if (error) {
         console.error('❌ Delete error:', error);
@@ -261,7 +262,9 @@ const App: React.FC = () => {
       }
 
       // Update UI
-      setProducts(prev => prev.filter(p => p.id !== productId));
+      setProducts(prev =>
+        prev.filter(p => !(p.id === product.id && p.code === product.code))
+      );
       console.log('✅ Product deleted successfully');
     } catch (error) {
       console.error('❌ Delete error:', error);

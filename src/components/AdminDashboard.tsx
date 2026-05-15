@@ -227,11 +227,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         await deleteProductImage(productToDelete.imageUrl);
       }
       
-      // 2. Hapus produk dari database
+      // 2. Hapus produk dari database (match id + code so duplicate rows aren't both removed)
       const { error } = await supabase
         .from('produk')
         .delete()
-        .eq('id', productToDelete.id);
+        .eq('id', productToDelete.id)
+        .eq('code', productToDelete.code);
 
       if (error) {
         alert('Gagal menghapus produk');
@@ -241,7 +242,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
       // 3. Update UI (state)
       onUpdateProducts(
-        products.filter(p => p.id !== productToDelete.id)
+        products.filter(
+          p => !(p.id === productToDelete.id && p.code === productToDelete.code)
+        )
       );
 
       // 4. Add to history
@@ -433,13 +436,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   
     try {
       if (editingProduct) {
-        // Update existing product
-        const { error } = await supabase
+        // Update by primary row id + original code (code is unique; upsert would insert a duplicate when code changes)
+        const { data, error } = await supabase
           .from('produk')
-          .upsert({
-            id: editingProduct.id,
-            ...productData
-          })
+          .update(productData)
+          .eq('id', editingProduct.id)
+          .eq('code', editingProduct.code)
           .select()
           .single();
   
@@ -450,13 +452,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         }
 
         // Update local state
+        const updatedProduct: Product = {
+          id: data.id,
+          code: data.code,
+          name: data.name,
+          price: Number(data.price),
+          category: data.category || 'Uncategorized',
+          description: data.description || '',
+          imageUrl: data.image_url || '',
+          updatedAt: data.updated_at || new Date().toISOString(),
+        };
         onUpdateProducts(
           products.map(p =>
-            p.id === editingProduct.id ? { 
-              ...p, 
-              ...formData,
-              updatedAt: new Date().toISOString()
-            } : p
+            p.id === editingProduct.id && p.code === editingProduct.code
+              ? updatedProduct
+              : p
           )
         );
 
